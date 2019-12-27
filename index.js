@@ -1,37 +1,41 @@
-var stream = require('stream'),
+const stream = require('stream'),
     JSONStream = require('JSONStream'),
-    Deferred = require('deferential'),
     bl = require('bl'),
     spawn = require('child_process').spawn;
 
-module.exports = getInfo;
-function getInfo(filePath, opts, cb) {
-  var params = [];
-  params.push('-show_streams', '-print_format', 'json', filePath);
+async function getInfo(filePath, opts) {
+  return new Promise((resolve, reject) => {
+    const params = [
+      '-show_streams', 
+      '-show_format',
+      '-print_format', 
+      'json', 
+      filePath
+    ];
 
-  var d = Deferred();
-  var info;
-  var stderr;
+    let info;
+    let stderr;
 
-  var ffprobe = spawn(opts.path, params);
-  ffprobe.once('close', function (code) {
-    if (!code) {
-      d.resolve(info);
-    } else {
-      var err = stderr.split('\n').filter(Boolean).pop();
-      d.reject(new Error(err));
-    }
-  });
+    const ffprobe = spawn(opts.path, params);
 
-  ffprobe.stderr.pipe(bl(function (err, data) {
-    stderr = data.toString();
-  }));
+    ffprobe.stderr.pipe(bl(function (err, data) {
+      stderr = data.toString();
+    }));
 
-  ffprobe.stdout
-    .pipe(JSONStream.parse())
-    .once('data', function (data) {
-      info = data;
+    ffprobe.stdout
+      .pipe(JSONStream.parse())
+      .once('data', (data) => {
+        info = data;
+      });
+
+    ffprobe.once('close', (code) => {
+      if (!code) {
+        return resolve(info);
+      }
+      const err = stderr.split('\n').filter(Boolean).pop();
+      reject(new Error(err));
     });
-
-  return d.nodeify(cb);
+  })
 }
+
+module.exports = getInfo;
